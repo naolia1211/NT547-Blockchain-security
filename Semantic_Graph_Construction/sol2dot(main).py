@@ -200,6 +200,6 @@ def process_directory(source_directory, output_directory):
                 continue  # Skip to next file
 
 if __name__ == '__main__':
-    source_directory = r'C:\Users\hao30\Documents\GitHub\NT547-Blockchain-security\Smart_Contracts_Datasets\6_transaction_order'
+    source_directory = @"C:\Users\hao30\Documents\GitHub\NT547-Blockchain-security\Smart_Contracts_Datasets\6_transaction_order'
     output_directory = r'C:\Users\hao30\Documents\GitHub\NT547-Blockchain-security\Smart_Contract_semantic_graph\6_transaction_order'  # Cập nhật đường dẫn thư mục đầu ra
     process_directory(source_directory, output_directory)

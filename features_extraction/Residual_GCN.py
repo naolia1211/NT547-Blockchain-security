@@ -3,6 +3,8 @@ import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
 import pickle
 import numpy
+import os
+
 
 class ResidualGCN(torch.nn.Module):
     def __init__(self, in_channels, out_channels):
@@ -22,21 +24,43 @@ class ResidualGCN(torch.nn.Module):
         x = F.relu(self.conv2(x, edge_index)) + identity2
         return x
 
-# Load node features từ file pickle
-with open('node_features.pkl', 'rb') as f:
-    node_features = pickle.load(f)
+def load_and_process(data_directory, filename):
+    # Load node features từ file pickle
+    file_path = os.path.join(data_directory, filename)
+    with open(file_path, 'rb') as f:
+        node_features = pickle.load(f)
 
-node_features_tensor = torch.tensor(numpy.array([node_features[node] for node in sorted(node_features.keys())]), dtype=torch.float)
+    node_features_tensor = torch.tensor(numpy.array([node_features[node] for node in sorted(node_features.keys())]), dtype=torch.float)
 
-# Ví dụ: Định nghĩa edge_index
-edge_index_data = [(0, 1), (1, 2), (2, 3)]
-edge_index = torch.tensor(edge_index_data, dtype=torch.long).t().contiguous()
+    # Ví dụ: Định nghĩa edge_index
+    edge_index_data = [(0, 1), (1, 2), (2, 3)]
+    edge_index = torch.tensor(edge_index_data, dtype=torch.long).t().contiguous()
 
-desired_output_dim = 64
-gcn_model = ResidualGCN(in_channels=node_features_tensor.shape[1], out_channels=desired_output_dim)
+    desired_output_dim = 64
+    gcn_model = ResidualGCN(in_channels=node_features_tensor.shape[1], out_channels=desired_output_dim)
 
-# Thực hiện forward pass
-content_features = gcn_model(node_features_tensor, edge_index)
+    # Thực hiện forward pass
+    return gcn_model(node_features_tensor, edge_index)
 
-# Lưu content features dưới dạng file .pt
-torch.save(content_features, 'content_features.pt')
+def process_directory(data_directory):
+    processed_features = []
+    for filename in os.listdir(data_directory):
+        if filename.endswith('.pkl'):
+            content_features = load_and_process(data_directory, filename)
+            processed_features.append(content_features)
+    return processed_features
+
+output_directory = r'C:\Users\hao30\Documents\GitHub\NT547-Blockchain-security\features_extraction\asset\content_features'
+
+# Process 'clean' directory
+clean_data_directory = r'C:\Users\hao30\Documents\GitHub\NT547-Blockchain-security\features_extraction\asset\node_features\clean'
+clean_features = process_directory(clean_data_directory)
+
+# Process 'vuln' directory
+vuln_data_directory = r'C:\Users\hao30\Documents\GitHub\NT547-Blockchain-security\features_extraction\asset\node_features\vuln'
+vuln_features = process_directory(vuln_data_directory)
+
+# Combine and save features
+combined_features = (clean_features, vuln_features)
+combined_features_file = os.path.join(output_directory, 'combined_content_features.pt')
+torch.save(combined_features, combined_features_file)

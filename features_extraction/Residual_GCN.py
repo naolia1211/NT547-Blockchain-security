@@ -53,13 +53,13 @@ def process_directory(data_directory, output_directory):
             load_and_process(data_directory, filename, output_directory)
 
 
-output_directory_vuln = r'D:\GitHub\NT547-Blockchain-security\features_extraction\asset\content_features\vuln'
-output_directory_clean = r'D:\GitHub\NT547-Blockchain-security\features_extraction\asset\content_features\clean'
+output_directory_vuln = r'C:\Users\hao30\Documents\GitHub\NT547-Blockchain-security\features_extraction\asset\content_features\clean'
+output_directory_clean = r'C:\Users\hao30\Documents\GitHub\NT547-Blockchain-security\features_extraction\asset\content_features\vuln'
 
 # Process 'clean' directory
-clean_data_directory = r'D:\GitHub\NT547-Blockchain-security\features_extraction\asset\node_features\clean'
+clean_data_directory = r'C:\Users\hao30\Documents\GitHub\NT547-Blockchain-security\features_extraction\asset\node_features\clean'
 process_directory(clean_data_directory, output_directory_clean)
 
 # Process 'vuln' directory
-vuln_data_directory = r'D:\GitHub\NT547-Blockchain-security\features_extraction\asset\node_features\vuln'
+vuln_data_directory = r'C:\Users\hao30\Documents\GitHub\NT547-Blockchain-security\features_extraction\asset\node_features\vuln'
 process_directory(vuln_data_directory, output_directory_vuln)

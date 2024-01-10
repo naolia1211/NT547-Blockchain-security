@@ -2,8 +2,8 @@ import torch
 import os
 
 # Replace with the actual path to your directories containing .pt files
-content_features_dir = r'D:\GitHub\NT547-Blockchain-security\features_extraction\asset\content_features\vuln\Newfolder'
-semantic_features_dir = r'D:\GitHub\NT547-Blockchain-security\features_extraction\asset\semantic_features\vuln'
+content_features_dir = r'C:\Users\hao30\Documents\GitHub\NT547-Blockchain-security\features_extraction\asset\content_features\pt_file'
+semantic_features_dir = r'C:\Users\hao30\Documents\GitHub\NT547-Blockchain-security\features_extraction\asset\semantic_features\pt_file'
 
 # Get the first .pt file from each directory
 content_features_file = next((f for f in os.listdir(content_features_dir) if f.endswith('.pt')), None)

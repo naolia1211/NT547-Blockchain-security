@@ -6,14 +6,16 @@ from torch.utils.data import Dataset, DataLoader
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
+from tqdm import tqdm
 
 # Feature selector class
 class FeatureSelector(nn.Module):
-    def __init__(self, input_size, output_size):
+    def __init__(self, input_size, output_size, dropout_rate=0.5):
         super(FeatureSelector, self).__init__()
         self.selector = nn.Sequential(
             nn.Linear(input_size, output_size),
-            nn.ReLU()
+            nn.ReLU(),
+            nn.Dropout(p=dropout_rate)  # Thêm lớp dropout ở đây
         )
 
     def forward(self, x):
@@ -59,19 +61,17 @@ class FeaturesDataset(Dataset):
     
 # Classification module
 class ClassificationModule(nn.Module):
-    def __init__(self, reduced_features_dim):
+    def __init__(self, reduced_features_dim, dropout_rate=0.5):
         super(ClassificationModule, self).__init__()
-        self.fc1 = nn.Linear(reduced_features_dim * 2, 1000)  # Adjusted for combined feature dimensions
-        self.fc2 = nn.Linear(1000, 100)  # Output is 100 for multiple binary classifications
+        self.fc1 = nn.Linear(reduced_features_dim * 2, 1000)
+        self.dropout1 = nn.Dropout(p=dropout_rate)  # Thêm lớp dropout
+        self.fc2 = nn.Linear(1000, 100)
 
     def forward(self, content_features, semantic_features):
-        # Concatenate along dimension 1 (features dimension)
         combined_features = torch.cat((content_features, semantic_features), dim=1)
-
-        # Ensure that combined_features is correctly reshaped for the linear layer
-        combined_features = combined_features.view(-1, 1000)  # Reshape to [batch_size, 1000]
-
+        combined_features = combined_features.view(-1, 1000)
         combined_features = F.relu(self.fc1(combined_features))
+        combined_features = self.dropout1(combined_features)  # Áp dụng dropout sau kích hoạt
         logits = self.fc2(combined_features)
         return logits
 
@@ -93,10 +93,14 @@ classifier = ClassificationModule(output_size)
 optimizer = torch.optim.Adam(classifier.parameters(), lr=0.001)
 
 # Training loop
-num_epochs = 10  # Define number of epochs
+num_epochs = 30  # Define number of epochs
 for epoch in range(num_epochs):
     classifier.train()
-    for content_features, semantic_features, labels in train_data_loader:
+    
+    # Tạo một progress bar với tqdm
+    progress_bar = tqdm(enumerate(train_data_loader), total=len(train_data_loader), desc=f"Epoch {epoch+1}/{num_epochs}")
+    
+    for batch_idx, (content_features, semantic_features, labels) in progress_bar:
         optimizer.zero_grad()
 
         # Reshape features for input to classifier
@@ -113,6 +117,9 @@ for epoch in range(num_epochs):
         loss = F.binary_cross_entropy_with_logits(outputs, labels)
         loss.backward()
         optimizer.step()
+        
+        # Cập nhật progress bar với thông tin về loss
+        progress_bar.set_postfix(loss=loss.item())
         
 # Evaluation
 classifier.eval()
@@ -132,7 +139,6 @@ for content_features, semantic_features, labels in validation_data_loader:
         true_labels.extend(labels.tolist())
         predicted_labels.extend(predicted.tolist())
 
-# Convert to binary format (0 or 1)
 true_labels = [int(label) for label in true_labels]
 predicted_labels = [int(pred) for pred in predicted_labels]
 
@@ -155,6 +161,5 @@ plt.title("Confusion Matrix")
 plt.ylabel('True Label')
 plt.xlabel('Predicted Label')
 
-# Lưu hình ảnh vào tệp
 plt.savefig(r'D:\GitHub\NT547-Blockchain-security\Classification_module\confusion_matrix.png')
-plt.close()  # Đóng figure sau khi lưu
+plt.close()  

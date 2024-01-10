@@ -3,7 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import os
 from torch.utils.data import Dataset, DataLoader
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 # Feature selector class
 class FeatureSelector(nn.Module):
@@ -36,26 +38,21 @@ class FeaturesDataset(Dataset):
 
     def __len__(self):
         return len(self.content_features_files)
-
+    
     def __getitem__(self, idx):
         content_features = torch.load(self.content_features_files[idx])
         semantic_features = torch.load(self.semantic_features_files[idx])
         
-        # Extract the label. Ensure it is a single scalar value.
+        # Assuming the last element in semantic_features is the label
         label = semantic_features[-1]
-        if isinstance(label, torch.Tensor):
-            if label.numel() == 1:
-                label = label.item()  # Convert tensor to a Python scalar
-            else:
-                raise ValueError(f"Label tensor has more than one element: {label.numel()} elements")
+        if isinstance(label, torch.Tensor) and label.numel() > 1:
+            label = label[0]  # Taking the first element if it's a tensor with multiple elements
 
-        semantic_features = semantic_features[:-1]  # Exclude the label
+        content_features = content_features.view(-1)[:input_size_content]  # Reshape and truncate if necessary
+        semantic_features = semantic_features.view(-1)[:input_size_semantic]  # Reshape and truncate if necessary
 
-        content_features = content_features.view(1, -1)[:,:input_size_content]
-        semantic_features = semantic_features.view(1, -1)[:,:input_size_semantic]
-
-        content_features = self.feature_selector_content(content_features)
-        semantic_features = self.feature_selector_semantic(semantic_features)
+        content_features = self.feature_selector_content(content_features.view(1, -1))
+        semantic_features = self.feature_selector_semantic(semantic_features.view(1, -1))
 
         return content_features, semantic_features, label
     
@@ -64,22 +61,24 @@ class FeaturesDataset(Dataset):
 class ClassificationModule(nn.Module):
     def __init__(self, reduced_features_dim):
         super(ClassificationModule, self).__init__()
-        self.conv1 = nn.Conv1d(in_channels=1, out_channels=8, kernel_size=1, stride=1)
-        self.adaptive_pool = nn.AdaptiveMaxPool1d(output_size=9472)
-        self.fc = nn.Linear(8 * 9472, 1)  # Output is 1 for binary classification
+        self.fc1 = nn.Linear(reduced_features_dim * 2, 1000)  # Adjusted for combined feature dimensions
+        self.fc2 = nn.Linear(1000, 100)  # Output is 100 for multiple binary classifications
 
     def forward(self, content_features, semantic_features):
+        # Concatenate along dimension 1 (features dimension)
         combined_features = torch.cat((content_features, semantic_features), dim=1)
-        combined_features = combined_features.view(1, 1, -1)
-        conv1d_output = F.relu(self.conv1(combined_features))
-        pooled_output = self.adaptive_pool(conv1d_output)
-        flattened_output = pooled_output.view(1, -1)
-        logits = self.fc(flattened_output)
+
+        # Ensure that combined_features is correctly reshaped for the linear layer
+        combined_features = combined_features.view(-1, 1000)  # Reshape to [batch_size, 1000]
+
+        combined_features = F.relu(self.fc1(combined_features))
+        logits = self.fc2(combined_features)
         return logits
 
+
 # Directories for features
-content_features_dir = r'D:\GitHub\NT547-Blockchain-security\features_extraction\asset\content_features\vuln\Newfolder'
-semantic_features_dir = r'D:\GitHub\NT547-Blockchain-security\features_extraction\asset\semantic_features\vuln'
+content_features_dir = r'D:\GitHub\NT547-Blockchain-security\features_extraction\asset\content_features\combine'
+semantic_features_dir = r'D:\GitHub\NT547-Blockchain-security\features_extraction\asset\semantic_features\combine'
 
 # Initialize datasets and dataloaders
 train_dataset = FeaturesDataset(content_features_dir, semantic_features_dir, feature_selector_content, feature_selector_semantic)
@@ -99,8 +98,18 @@ for epoch in range(num_epochs):
     classifier.train()
     for content_features, semantic_features, labels in train_data_loader:
         optimizer.zero_grad()
+
+        # Reshape features for input to classifier
+        content_features = content_features.squeeze(1)  # Removing extra dimensions
+        semantic_features = semantic_features.squeeze(1)
+
+        # Forward pass
         outputs = classifier(content_features, semantic_features)
-        labels = labels.float().unsqueeze(1)  # Ensure labels are correctly shaped
+
+        # Ensure labels are the correct shape
+        labels = labels.float().view_as(outputs)  # Reshape labels to match output size
+
+        # Compute loss
         loss = F.binary_cross_entropy_with_logits(outputs, labels)
         loss.backward()
         optimizer.step()
@@ -112,18 +121,40 @@ predicted_labels = []
 
 for content_features, semantic_features, labels in validation_data_loader:
     with torch.no_grad():
+        content_features = content_features.squeeze(1)
+        semantic_features = semantic_features.squeeze(1)
+        
         outputs = classifier(content_features, semantic_features)
         predicted = torch.round(torch.sigmoid(outputs)).squeeze()
-        true_labels.extend(labels.numpy())
-        predicted_labels.extend(predicted.numpy())
 
-# Calculate and print metrics
+        labels = labels.squeeze(0)  # Squeeze labels to one dimension
+
+        true_labels.extend(labels.tolist())
+        predicted_labels.extend(predicted.tolist())
+
+# Convert to binary format (0 or 1)
+true_labels = [int(label) for label in true_labels]
+predicted_labels = [int(pred) for pred in predicted_labels]
+
+# Calculate and print metrics for multiclass classification
 accuracy = accuracy_score(true_labels, predicted_labels)
-precision = precision_score(true_labels, predicted_labels, average='binary')
-recall = recall_score(true_labels, predicted_labels, average='binary')
-f1 = f1_score(true_labels, predicted_labels, average='binary')
+precision = precision_score(true_labels, predicted_labels, average='macro', zero_division=1)
+recall = recall_score(true_labels, predicted_labels, average='macro')
+f1 = f1_score(true_labels, predicted_labels, average='macro')
 
 print("Accuracy:", accuracy)
 print("Precision:", precision)
 print("Recall:", recall)
 print("F1 Score:", f1)
+
+# Vẽ Confusion Matrix
+cm = confusion_matrix(true_labels, predicted_labels)
+plt.figure(figsize=(10, 7))
+sns.heatmap(cm, annot=True, fmt="d")
+plt.title("Confusion Matrix")
+plt.ylabel('True Label')
+plt.xlabel('Predicted Label')
+
+# Lưu hình ảnh vào tệp
+plt.savefig(r'D:\GitHub\NT547-Blockchain-security\Classification_module\confusion_matrix.png')
+plt.close()  # Đóng figure sau khi lưu
